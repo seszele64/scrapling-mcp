@@ -29,9 +29,9 @@ description: "Task list for MCP Server Implementation"
 
 **Purpose**: Minimal setup - project already initialized
 
-- [ ] T001 [P] Verify existing project structure in src/mcp_scraper/
-- [ ] T002 [P] Verify pyproject.toml has required dependencies (FastMCP, Scrapling, Pydantic, Loguru) in pyproject.toml
-- [ ] T003 [P] Create tests/ directory structure (tests/unit/, tests/integration/)
+- [X] T001 [P] Verify existing project structure in src/mcp_scraper/
+- [X] T002 [P] Verify pyproject.toml has required dependencies (FastMCP, Scrapling, Pydantic, Loguru) in pyproject.toml
+- [X] T003 [P] Create tests/ directory structure (tests/unit/, tests/integration/)
 
 ---
 
@@ -58,12 +58,12 @@ description: "Task list for MCP Server Implementation"
 
 ### Implementation for User Story 1
 
-- [ ] T008 [US1] Create src/mcp_scraper/server.py with FastMCP server initialization
-- [ ] T009 [US1] Implement scrape_simple tool in src/mcp_scraper/server.py with parameters: url, selector, extract, timeout
-- [ ] T010 [US1] Add URL validation integration in scrape_simple tool
-- [ ] T011 [US1] Add response formatting for scrape_simple (url, status_code, title, text, html, headers, selectors, timestamp)
-- [ ] T012 [US1] Add error handling for scrape_simple (invalid URL, timeout, HTTP errors)
-- [ ] T013 [US1] Add console script entry point in pyproject.toml: mcp-scraper = "mcp_scraper.server:main"
+- [X] T008 [US1] Create src/mcp_scraper/server.py with FastMCP server initialization
+- [X] T009 [US1] Implement scrape_simple tool in src/mcp_scraper/server.py with parameters: url, selector, extract, timeout
+- [X] T010 [US1] Add URL validation integration in scrape_simple tool
+- [X] T011 [US1] Add response formatting for scrape_simple (url, status_code, title, text, html, headers, selectors, timestamp)
+- [X] T012 [US1] Add error handling for scrape_simple (invalid URL, timeout, HTTP errors)
+- [X] T013 [US1] Add console script entry point in pyproject.toml: mcp-scraper = "mcp_scraper.server:main"
 
 **Checkpoint**: At this point, User Story 1 should be fully functional. Test with: `mcp-scraper --transport stdio` and call scrape_simple tool.
 
@@ -77,14 +77,14 @@ description: "Task list for MCP Server Implementation"
 
 ### Implementation for User Story 2
 
-- [ ] T014 [US2] Implement scrape_stealth tool in src/mcp_scraper/server.py with parameters: url, stealth_level, solve_cloudflare, network_idle, load_dom, timeout, proxy
-- [ ] T015 [US2] Add stealth level mapping (minimal/standard/maximum) to StealthConfig presets in src/mcp_scraper/server.py
-- [ ] T016 [US2] Integrate scrape_with_retry() with stealth configuration in scrape_stealth in src/mcp_scraper/server.py
-- [ ] T017 [US2] Add Cloudflare challenge detection and solving logic in scrape_stealth in src/mcp_scraper/server.py
-- [ ] T018 [US2] Add proxy support integration in scrape_stealth tool in src/mcp_scraper/server.py
-- [ ] T019 [US2] Implement scrape_session tool in src/mcp_scraper/server.py with parameters: url, session_id, cookies, stealth_level
-- [ ] T020 [US2] Add session management integration (get_session, close_session) in scrape_session in src/mcp_scraper/server.py
-- [ ] T021 [US2] Add cookie persistence across session requests in src/mcp_scraper/server.py
+- [X] T014 [US2] Implement scrape_stealth tool in src/mcp_scraper/server.py with parameters: url, stealth_level, solve_cloudflare, network_idle, load_dom, timeout, proxy
+- [X] T015 [US2] Add stealth level mapping (minimal/standard/maximum) to StealthConfig presets in src/mcp_scraper/server.py
+- [X] T016 [US2] Integrate scrape_with_retry() with stealth configuration in scrape_stealth in src/mcp_scraper/server.py
+- [X] T017 [US2] Add Cloudflare challenge detection and solving logic in scrape_stealth in src/mcp_scraper/server.py
+- [X] T018 [US2] Add proxy support integration in scrape_stealth tool in src/mcp_scraper/server.py
+- [X] T019 [US2] Implement scrape_session tool in src/mcp_scraper/server.py with parameters: url, session_id, cookies, stealth_level
+- [X] T020 [US2] Add session management integration (get_session, close_session) in scrape_session in src/mcp_scraper/server.py
+- [X] T021 [US2] Add cookie persistence across session requests in src/mcp_scraper/server.py
 
 **Checkpoint**: At this point, User Stories 1 AND 2 should both work independently. Test scrape_stealth and scrape_session tools.
 

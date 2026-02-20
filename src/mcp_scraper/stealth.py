@@ -11,25 +11,19 @@ This module provides stealth web scraping capabilities including:
 import asyncio
 import random
 import re
-import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Any, Callable, Optional
+from typing import Any
 from urllib.parse import urlparse
 
-try:
-    from scrapling import Fetcher
-    from scrapling import StealthySession as AsyncStealthySession
-    from scrapling import Page
-except ImportError:
-    # Fallback for type hints if scrapling is not available
-    Any = Any  # type: ignore
-    AsyncStealthySession = Any  # type: ignore
-    Page = Any  # type: ignore
-    Fetcher = Any  # type: ignore
-
 from loguru import logger
+
+# Import scrapling types - use Any for compatibility
+# The scrapling library returns Selector objects with .text, .html, .status, etc.
+# Import core scrapling components
+from scrapling import Selector as Page
+from scrapling import StealthyFetcher as AsyncStealthySession
 
 
 class StealthLevel(Enum):
@@ -53,13 +47,19 @@ class StealthConfig:
         headless: Run browser in headless mode (default: True)
         solve_cloudflare: Attempt to solve Cloudflare challenges (default: False)
         humanize: Add human-like behavior patterns (default: True)
+        humanize_duration: Maximum cursor movement duration in seconds (default: 1.5)
         geoip: Use geoip-based request routing (default: False)
         os_randomize: Randomize OS fingerprint (default: True)
         block_webrtc: Block WebRTC to prevent IP leaks (default: True)
         allow_webgl: Allow WebGL fingerprinting (default: False)
         google_search: Simulate Google Chrome browser (default: True)
         block_images: Block images to reduce bandwidth (default: False)
+        block_ads: Block advertisements (default: True)
         disable_resources: Disable CSS and JS resources (default: False)
+        network_idle: Wait for network inactivity (default: False)
+        load_dom: Wait for DOMContentLoaded (default: False)
+        wait_selector: Wait for specific element to appear (default: None)
+        wait_selector_state: Element state to wait for (default: None)
         timeout: Request timeout in seconds (default: 30)
         proxy: Proxy URL for requests (default: None)
     """
@@ -67,15 +67,21 @@ class StealthConfig:
     headless: bool = True
     solve_cloudflare: bool = False
     humanize: bool = True
+    humanize_duration: float = 1.5
     geoip: bool = False
     os_randomize: bool = True
     block_webrtc: bool = True
     allow_webgl: bool = False
     google_search: bool = True
     block_images: bool = False
+    block_ads: bool = True
     disable_resources: bool = False
+    network_idle: bool = False
+    load_dom: bool = False
+    wait_selector: str | None = None
+    wait_selector_state: str | None = None
     timeout: int = 30
-    proxy: Optional[str] = None
+    proxy: str | None = None
 
     def to_scrapling_options(self) -> dict[str, Any]:
         """Convert config to scrapling options format."""
@@ -106,12 +112,34 @@ class StealthConfig:
         if self.disable_resources:
             options["disable_resources"] = True
 
+        # Additional stealth options
+        if self.network_idle:
+            options["network_idle"] = True
+
+        if self.load_dom:
+            options["load_dom"] = True
+
+        if self.wait_selector:
+            options["wait_selector"] = self.wait_selector
+
+        if self.wait_selector_state:
+            options["wait_selector_state"] = self.wait_selector_state
+
+        if self.humanize_duration:
+            options["humanize_duration"] = self.humanize_duration
+
+        if self.geoip:
+            options["geoip"] = True
+
+        if self.os_randomize:
+            options["os_randomize"] = True
+
         return options
 
 
 # Global session storage
-_session: Optional[AsyncStealthySession] = None
-_config_cache: Optional[StealthConfig] = None
+_session: AsyncStealthySession | None = None
+_config_cache: StealthConfig | None = None
 
 
 def get_minimal_stealth() -> StealthConfig:
@@ -213,7 +241,7 @@ def get_stealth_config(level: StealthLevel) -> StealthConfig:
     return configs[level]
 
 
-async def get_session(config: Optional[StealthConfig] = None) -> AsyncStealthySession:
+async def get_session(config: StealthConfig | None = None) -> AsyncStealthySession:
     """Get or create an async stealthy session.
 
     This function manages a global session instance. If a session exists
@@ -263,7 +291,7 @@ async def close_session() -> None:
 
     if _session is not None:
         try:
-            await _session.close()
+            await _session.close()  # type: ignore[attr-defined]
             logger.debug("Stealth session closed successfully")
         except Exception as e:
             logger.warning(f"Error closing session: {e}")
@@ -298,11 +326,11 @@ class TimeoutError(ScrapeError):
 
 async def scrape_with_retry(
     url: str,
-    config: Optional[StealthConfig] = None,
+    config: StealthConfig | None = None,
     max_retries: int = 3,
     backoff_factor: float = 1.5,
-    proxy_list: Optional[list[str]] = None,
-    selectors: Optional[dict[str, str]] = None,
+    proxy_list: list[str] | None = None,
+    selectors: dict[str, str] | None = None,
 ) -> Page:
     """Scrape a URL with retry logic and exponential backoff.
 
@@ -338,7 +366,7 @@ async def scrape_with_retry(
         config = get_standard_stealth()
 
     current_proxy_idx = 0
-    last_error: Optional[Exception] = None
+    last_error: Exception | None = None
 
     for attempt in range(max_retries):
         try:
@@ -352,14 +380,14 @@ async def scrape_with_retry(
 
             # Attempt to fetch the page
             logger.info(f"Scraping attempt {attempt + 1}/{max_retries}: {url}")
-            page = await session.fetch(url, wait_for=2)
+            page = await session.fetch(url, wait_for=2)  # type: ignore[call-arg,misc]
 
             # Check for Cloudflare challenge
             if _detect_cloudflare(page):
                 if config.solve_cloudflare:
                     logger.info("Cloudflare challenge detected, attempting to solve...")
                     await asyncio.sleep(3)  # Wait for challenge
-                    page = await session.fetch(url, wait_for=5)
+                    page = await session.fetch(url, wait_for=5)  # type: ignore[call-arg,misc]
                 else:
                     raise CloudflareError("Cloudflare protection detected")
 
@@ -368,7 +396,7 @@ async def scrape_with_retry(
                 raise BlockedError("Request blocked by anti-bot measures")
 
             logger.info(f"Successfully scraped: {url}")
-            return page
+            return page  # type: ignore[no-any-return]
 
         except CloudflareError:
             logger.warning(f"Cloudflare error on attempt {attempt + 1}")
@@ -412,7 +440,7 @@ def _detect_cloudflare(page: Page) -> bool:
     try:
         # Check for Cloudflare-specific elements
         if hasattr(page, "html"):
-            html = page.html.lower()
+            html = str(getattr(page, "html", "")).lower()
             cloudflare_indicators = [
                 "cloudflare",
                 "checking your browser",
@@ -437,7 +465,7 @@ def _detect_block(page: Page) -> bool:
     """
     try:
         if hasattr(page, "html"):
-            html = page.html.lower()
+            html = str(getattr(page, "html", "")).lower()
             block_indicators = [
                 "access denied",
                 "forbidden",
@@ -456,7 +484,7 @@ def _detect_block(page: Page) -> bool:
 def format_response(
     page: Page,
     url: str,
-    selectors: Optional[dict[str, str]] = None,
+    selectors: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Format scraping response into a structured dictionary.
 
@@ -482,22 +510,19 @@ def format_response(
 
     # Get page title
     try:
-        if hasattr(page, "title"):
-            response["title"] = page.title
+        response["title"] = getattr(page, "title", None)
     except Exception:
         pass
 
     # Get status code
     try:
-        if hasattr(page, "status"):
-            response["status"] = page.status
+        response["status"] = getattr(page, "status", None)
     except Exception:
         pass
 
     # Get HTML content
     try:
-        if hasattr(page, "html"):
-            response["html"] = page.html
+        response["html"] = getattr(page, "html", None)
     except Exception:
         pass
 
@@ -510,20 +535,171 @@ def format_response(
 
     # Extract specific selectors if provided
     if selectors:
-        extracted: dict[str, Any] = {}
-        try:
-            for name, selector in selectors.items():
-                if hasattr(page, "get"):
-                    element = page.get(selector)
-                    if element:
-                        extracted[name] = element.text
-                    else:
-                        extracted[name] = None
-        except Exception as e:
-            logger.warning(f"Error extracting selectors: {e}")
-        response["selectors"] = extracted
+        response["selectors"] = extract_selectors(page, selectors)
 
     return response
+
+
+def extract_selectors(page: Page, selectors: dict[str, str]) -> dict[str, Any]:
+    """Extract data from page using CSS selectors.
+
+    Supports:
+    - Text extraction: "selector" - extracts text content
+    - HTML extraction: "selector::html" - extracts inner HTML
+    - Attribute extraction: "selector@attrname" - extracts attribute value
+    - Multiple elements: "selector" - returns list of values
+
+    Args:
+        page: Scraped page object
+        selectors: Dict of {name: css_selector}
+
+    Returns:
+        Dict with extracted values for each selector name
+    """
+    extracted: dict[str, Any] = {}
+
+    try:
+        for name, selector in selectors.items():
+            result = _extract_single_selector(page, selector)
+            extracted[name] = result
+    except Exception as e:
+        logger.warning(f"Error extracting selectors: {e}")
+
+    return extracted
+
+
+def _extract_single_selector(page: Page, selector: str) -> Any:
+    """Extract data from a single CSS selector.
+
+    Supports:
+    - "selector" - extract text content (first match)
+    - "selector::html" - extract HTML content
+    - "selector@attr" - extract attribute value
+    - "selector@attr1@attr2" - extract multiple attributes as dict
+
+    Args:
+        page: Scraped page object
+        selector: CSS selector with optional ::html or @attr suffix
+
+    Returns:
+        Extracted value (str, list, or dict)
+    """
+    # Parse selector for special syntax
+    html_extraction = "::html" in selector
+    attr_extraction = None
+
+    if "@" in selector and not html_extraction:
+        # Attribute extraction: "a@href" or "img@src@alt"
+        parts = selector.rsplit("@", 1)
+        selector = parts[0]
+        attr_extraction = parts[1] if len(parts) > 1 else None
+
+    # Remove ::html suffix if present
+    clean_selector = selector.replace("::html", "")
+
+    # Get elements matching selector
+    try:
+        if hasattr(page, "get"):
+            # Use scrapling's get method which returns first match or list
+            elements = page.get(clean_selector)  # type: ignore[call-arg]
+        else:
+            elements = None
+    except Exception:
+        elements = None
+
+    if elements is None:
+        return None
+
+    # Handle single element vs multiple elements
+    is_iterable = hasattr(elements, "__iter__") and not isinstance(elements, str)
+    if is_iterable:
+        # Multiple elements
+        element_list = list(elements)
+        if len(element_list) == 0:
+            return None
+
+        if html_extraction:
+            return [get_element_html(el) for el in element_list]
+
+        if attr_extraction:
+            if "@" in attr_extraction:
+                # Multiple attributes
+                attrs = attr_extraction.split("@")
+                result = []
+                for el in element_list:
+                    attr_dict = {}
+                    for attr in attrs:
+                        attr_dict[attr] = get_element_attribute(el, attr)
+                    result.append(attr_dict)
+                return result
+            else:
+                return [get_element_attribute(el, attr_extraction) for el in element_list]
+
+        # Default: return text content
+        return [get_element_text(el) for el in element_list]
+    else:
+        # Single element
+        element = elements
+
+        if html_extraction:
+            return get_element_html(element)
+
+        if attr_extraction:
+            if "@" in attr_extraction:
+                # Multiple attributes
+                attrs = attr_extraction.split("@")
+                return {attr: get_element_attribute(element, attr) for attr in attrs}
+            else:
+                return get_element_attribute(element, attr_extraction)
+
+        # Default: return text content
+        return get_element_text(element)
+
+
+def get_element_text(element: Any) -> str | None:
+    """Extract text content from an element."""
+    try:
+        if hasattr(element, "text"):
+            return element.text  # type: ignore[no-any-return]
+        elif hasattr(element, "inner_text"):
+            return element.inner_text  # type: ignore[no-any-return]
+        elif hasattr(element, "text_content"):
+            return element.text_content  # type: ignore[no-any-return]
+        elif hasattr(element, "textContent"):
+            return element.textContent  # type: ignore[no-any-return]
+        elif hasattr(element, "innerHTML"):
+            return element.innerHTML  # type: ignore[no-any-return]
+        return str(element) if element else None
+    except Exception:
+        return None
+
+
+def get_element_html(element: Any) -> str | None:
+    """Extract HTML content from an element."""
+    try:
+        if hasattr(element, "html"):
+            return element.html  # type: ignore[no-any-return]
+        elif hasattr(element, "innerHTML"):
+            return element.innerHTML  # type: ignore[no-any-return]
+        elif hasattr(element, "outerHTML"):
+            return element.outerHTML  # type: ignore[no-any-return]
+        return str(element) if element else None
+    except Exception:
+        return None
+
+
+def get_element_attribute(element: Any, attr: str) -> str | None:
+    """Extract attribute value from an element."""
+    try:
+        if hasattr(element, attr):
+            return getattr(element, attr)  # type: ignore[no-any-return]
+        elif hasattr(element, "get_attribute"):
+            return element.get_attribute(attr)  # type: ignore[no-any-return]
+        elif hasattr(element, "attributes") and isinstance(element.attributes, dict):
+            return element.attributes.get(attr)
+        return None
+    except Exception:
+        return None
 
 
 def validate_url(url: str) -> bool:
@@ -603,7 +779,7 @@ def validate_url(url: str) -> bool:
         return False
 
 
-def rotate_proxy(proxy_list: list[str]) -> Optional[str]:
+def rotate_proxy(proxy_list: list[str]) -> str | None:
     """Simple proxy rotation function.
 
     Returns a random proxy from the list.
@@ -651,6 +827,7 @@ __all__ = [
     "scrape_with_retry",
     # Utilities
     "format_response",
+    "extract_selectors",
     "validate_url",
     "rotate_proxy",
     "cleanup_stealth",
