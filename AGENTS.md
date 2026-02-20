@@ -1207,3 +1207,10 @@ Format scraping response.
 ---
 
 *This documentation was generated for the Scrapling MCP Server project.*
+
+## Active Technologies
+- Python 3.10+ (already configured in pyproject.toml) + FastMCP (MCP framework), Scrapling (scraping engine), Pydantic (config), Loguru (logging) (001-mcp-server-implementation)
+- N/A - stateless server with optional session caching in memory (001-mcp-server-implementation)
+
+## Recent Changes
+- 001-mcp-server-implementation: Added Python 3.10+ (already configured in pyproject.toml) + FastMCP (MCP framework), Scrapling (scraping engine), Pydantic (config), Loguru (logging)

@@ -1,0 +1,236 @@
+{
+  "name": "Scrapling MCP Server",
+  "version": "1.0.0",
+  "tools": [
+    {
+      "name": "scrape_simple",
+      "description": "Simple HTTP scraping for static content without stealth features",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "URL to scrape",
+            "format": "uri"
+          },
+          "selector": {
+            "type": "string",
+            "description": "CSS selector for targeted extraction",
+            "optional": true
+          },
+          "extract": {
+            "type": "string",
+            "enum": ["text", "html", "both"],
+            "default": "text",
+            "description": "What content to extract"
+          },
+          "timeout": {
+            "type": "integer",
+            "minimum": 1000,
+            "maximum": 300000,
+            "default": 30000,
+            "description": "Request timeout in milliseconds"
+          }
+        },
+        "required": ["url"]
+      },
+      "returns": {
+        "type": "object",
+        "properties": {
+          "url": { "type": "string" },
+          "status_code": { "type": "integer" },
+          "title": { "type": "string" },
+          "text": { "type": "string" },
+          "html": { "type": "string" },
+          "headers": { "type": "object" },
+          "selectors": { "type": "object" },
+          "error": { "type": "string" },
+          "timestamp": { "type": "string", "format": "date-time" }
+        },
+        "required": ["url", "status_code", "timestamp"]
+      }
+    },
+    {
+      "name": "scrape_stealth",
+      "description": "Stealth-aware scraping with configurable anti-detection",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "URL to scrape",
+            "format": "uri"
+          },
+          "stealth_level": {
+            "type": "string",
+            "enum": ["minimal", "standard", "maximum"],
+            "default": "standard",
+            "description": "Stealth protection level"
+          },
+          "solve_cloudflare": {
+            "type": "boolean",
+            "default": false,
+            "description": "Attempt to solve Cloudflare challenges"
+          },
+          "network_idle": {
+            "type": "boolean",
+            "default": true,
+            "description": "Wait for network inactivity"
+          },
+          "load_dom": {
+            "type": "boolean",
+            "default": true,
+            "description": "Wait for DOMContentLoaded event"
+          },
+          "timeout": {
+            "type": "integer",
+            "minimum": 1000,
+            "maximum": 300000,
+            "default": 30000,
+            "description": "Request timeout in milliseconds"
+          },
+          "proxy": {
+            "type": "string",
+            "description": "Proxy URL for requests",
+            "format": "uri",
+            "optional": true
+          }
+        },
+        "required": ["url"]
+      },
+      "returns": {
+        "$ref": "#/tools/0/returns"
+      }
+    },
+    {
+      "name": "scrape_session",
+      "description": "Session-based scraping with persistent state and cookies",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "URL to scrape",
+            "format": "uri"
+          },
+          "session_id": {
+            "type": "string",
+            "description": "Session identifier for persistence",
+            "optional": true
+          },
+          "cookies": {
+            "type": "object",
+            "description": "Initial cookies to set",
+            "optional": true
+          },
+          "stealth_level": {
+            "type": "string",
+            "enum": ["minimal", "standard", "maximum"],
+            "default": "standard",
+            "description": "Stealth protection level"
+          }
+        },
+        "required": ["url"]
+      },
+      "returns": {
+        "$ref": "#/tools/0/returns"
+      }
+    },
+    {
+      "name": "extract_structured",
+      "description": "Extract structured data using CSS selectors",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "URL to scrape",
+            "format": "uri"
+          },
+          "selectors": {
+            "type": "object",
+            "description": "Map of name to CSS selector",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "stealth_level": {
+            "type": "string",
+            "enum": ["minimal", "standard", "maximum"],
+            "default": "standard",
+            "description": "Stealth protection level"
+          }
+        },
+        "required": ["url", "selectors"]
+      },
+      "returns": {
+        "allOf": [
+          { "$ref": "#/tools/0/returns" },
+          {
+            "type": "object",
+            "properties": {
+              "extracted": {
+                "type": "object",
+                "description": "Extracted selector values"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "scrape_batch",
+      "description": "Scrape multiple URLs in sequence",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "urls": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uri"
+            },
+            "description": "List of URLs to scrape"
+          },
+          "stealth_level": {
+            "type": "string",
+            "enum": ["minimal", "standard", "maximum"],
+            "default": "standard",
+            "description": "Stealth protection level"
+          },
+          "delay": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 60,
+            "default": 1.0,
+            "description": "Delay between requests in seconds"
+          }
+        },
+        "required": ["urls"]
+      },
+      "returns": {
+        "type": "object",
+        "properties": {
+          "total": { "type": "integer" },
+          "successful": { "type": "integer" },
+          "failed": { "type": "integer" },
+          "results": {
+            "type": "array",
+            "items": { "$ref": "#/tools/0/returns" }
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "url": { "type": "string" },
+                "error": { "type": "string" }
+              }
+            }
+          }
+        },
+        "required": ["total", "successful", "failed", "results"]
+      }
+    }
+  ]
+}
