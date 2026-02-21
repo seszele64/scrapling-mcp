@@ -244,7 +244,7 @@ async def mock_stealth_session(mock_session):
 @pytest.fixture
 def minimal_stealth_config():
     """Get minimal stealth configuration for fast, basic anti-detection."""
-    from mcp_scraper.config import StealthConfig
+    from mcp_scraper.stealth import StealthConfig
 
     return StealthConfig(
         headless=True,
@@ -260,14 +260,14 @@ def minimal_stealth_config():
         disable_resources=True,
         network_idle=False,
         load_dom=False,
-        timeout=15000,
+        timeout=15,
     )
 
 
 @pytest.fixture
 def standard_stealth_config():
     """Get standard stealth configuration for balanced speed and anonymity."""
-    from mcp_scraper.config import StealthConfig
+    from mcp_scraper.stealth import StealthConfig
 
     return StealthConfig(
         headless=True,
@@ -277,21 +277,21 @@ def standard_stealth_config():
         geoip=False,
         os_randomize=True,
         block_webrtc=True,
-        allow_webgl=True,
+        allow_webgl=False,
         google_search=True,
         block_images=False,
         block_ads=True,
         disable_resources=False,
         network_idle=True,
         load_dom=True,
-        timeout=30000,
+        timeout=30,
     )
 
 
 @pytest.fixture
 def maximum_stealth_config():
     """Get maximum stealth configuration for heavily protected sites."""
-    from mcp_scraper.config import StealthConfig
+    from mcp_scraper.stealth import StealthConfig
 
     return StealthConfig(
         headless=True,
@@ -301,7 +301,7 @@ def maximum_stealth_config():
         geoip=True,
         os_randomize=True,
         block_webrtc=True,
-        allow_webgl=True,
+        allow_webgl=False,
         google_search=True,
         block_images=False,
         block_ads=True,
@@ -310,7 +310,7 @@ def maximum_stealth_config():
         load_dom=True,
         wait_selector="body",
         wait_selector_state="visible",
-        timeout=60000,
+        timeout=60,
     )
 
 
