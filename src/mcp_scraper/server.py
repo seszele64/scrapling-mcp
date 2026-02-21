@@ -794,7 +794,7 @@ async def extract_structured(
                 "text": None,
                 "extracted": None,
                 "timestamp": datetime.utcnow().isoformat() + "Z",
-                "error": f"Selectors must be a valid JSON object: {str(e)}",
+                "error": f"Selectors must be a valid dictionary (JSON object): {str(e)}",
             }
 
     if not isinstance(selectors, dict):

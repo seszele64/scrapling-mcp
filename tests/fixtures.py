@@ -355,6 +355,11 @@ class MockPageObject:
         """Return HTML content."""
         return self._body
 
+    @property
+    def title(self) -> str:
+        """Return page title."""
+        return self._title
+
     def get_all_text(self, strip: bool = False) -> str:
         """Extract all text content from the page.
 
