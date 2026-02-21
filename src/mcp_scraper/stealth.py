@@ -908,6 +908,74 @@ def rotate_proxy(proxy_list: list[str]) -> str | None:
     return random.choice(proxy_list)
 
 
+def get_element_text(element: Any) -> str:
+    """Extract text content from a scraping element.
+
+    Checks for .text property first, then .inner_text, and falls back to str().
+
+    Args:
+        element: A page element object from scrapling
+
+    Returns:
+        The text content of the element
+    """
+    # Try .text property first (most common in scrapling)
+    if hasattr(element, "text"):
+        return element.text
+
+    # Fall back to .inner_text
+    if hasattr(element, "inner_text"):
+        return element.inner_text
+
+    # Last resort: convert to string
+    return str(element)
+
+
+def get_element_html(element: Any) -> str:
+    """Extract HTML content from a scraping element.
+
+    Checks for .html property first, then .innerHTML.
+
+    Args:
+        element: A page element object from scrapling
+
+    Returns:
+        The HTML content of the element
+    """
+    # Try .html property first
+    if hasattr(element, "html"):
+        return element.html
+
+    # Fall back to .innerHTML
+    if hasattr(element, "innerHTML"):
+        return element.innerHTML
+
+    return ""
+
+
+def get_element_attribute(element: Any, attribute: str) -> str | None:
+    """Extract an attribute value from a scraping element.
+
+    Checks for .get_attribute() method first, then direct property access.
+
+    Args:
+        element: A page element object from scrapling
+        attribute: The name of the attribute to retrieve
+
+    Returns:
+        The attribute value, or None if not found
+    """
+    # Try .get_attribute() method first (standard in browser automation)
+    if hasattr(element, "get_attribute"):
+        return element.get_attribute(attribute)
+
+    # Fall back to direct property access
+    if hasattr(element, attribute):
+        return getattr(element, attribute)
+
+    return None
+
+
 async def cleanup_stealth() -> None:
     """Async context manager cleanup helper.
 
@@ -943,4 +1011,8 @@ __all__ = [
     "validate_url",
     "rotate_proxy",
     "cleanup_stealth",
+    # Element extraction helpers
+    "get_element_text",
+    "get_element_html",
+    "get_element_attribute",
 ]
