@@ -415,10 +415,23 @@ Extract structured data using CSS selectors.
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `url` | string | Yes | URL to scrape |
-| `selectors` | object | Yes | Map of name → CSS selector |
+| `selectors` | object \| string | Yes | Map of name → CSS selector. Can be either a JSON object or a JSON string representation. |
 | `stealth_level` | string | No | Stealth level (default: "standard") |
 
-**Example**:
+**Selector Syntax**:
+
+The `selectors` parameter supports CSS selector syntax with the following extensions:
+
+| Syntax | Description | Example |
+|--------|-------------|---------|
+| `selector` | Extract text content | `"title": "h1"` |
+| `selector::html` | Extract HTML content | `"content": "div::html"` |
+| `selector::text` | Extract text using ::text pseudo-element | `"text": "p::text"` |
+| `selector::attr(name)` | Extract attribute value | `"link": "a::attr(href)"` |
+| `selector@attr` | Extract attribute (alternative syntax) | `"image": "img@src"` |
+| `selector@attr1@attr2` | Extract multiple attributes | `"data": "img@src@alt"` |
+
+**Example with dict input**:
 ```json
 {
   "url": "https://example.com/blog",
@@ -426,8 +439,18 @@ Extract structured data using CSS selectors.
     "title": "h1.article-title",
     "content": "div.article-content",
     "author": "span.author-name",
-    "date": "time.publish-date"
+    "date": "time.publish-date",
+    "link": "a.read-more::attr(href)",
+    "image": "img.featured@src@alt"
   }
+}
+```
+
+**Example with JSON string input**:
+```json
+{
+  "url": "https://example.com/blog",
+  "selectors": "{\"title\": \"h1.article-title\", \"content\": \"div.article-content\", \"link\": \"a.read-more::attr(href)\"}"
 }
 ```
 
@@ -1195,6 +1218,40 @@ Format scraping response.
 - `selectors` (dict): Optional CSS selectors
 
 **Returns**: dict with response data
+
+#### `get_element_text(element)`
+
+Extract text content from a scraping element with fallbacks.
+
+**Parameters**:
+- `element` (Any): A page element object from scrapling
+
+**Returns**: str - The text content of the element
+
+**Description**: Checks for `.text` property first, then `.inner_text`, and falls back to `str()`.
+
+#### `get_element_html(element)`
+
+Extract HTML content from a scraping element with fallbacks.
+
+**Parameters**:
+- `element` (Any): A page element object from scrapling
+
+**Returns**: str - The HTML content of the element
+
+**Description**: Checks for `.html` property first, then `.innerHTML`.
+
+#### `get_element_attribute(element, attribute)`
+
+Extract an attribute value from a scraping element with fallbacks.
+
+**Parameters**:
+- `element` (Any): A page element object from scrapling
+- `attribute` (str): The name of the attribute to retrieve
+
+**Returns**: str | None - The attribute value, or None if not found
+
+**Description**: Checks for `.get_attribute()` method first, then direct property access.
 
 ---
 

@@ -911,13 +911,41 @@ def rotate_proxy(proxy_list: list[str]) -> str | None:
 def get_element_text(element: Any) -> str:
     """Extract text content from a scraping element.
 
-    Checks for .text property first, then .inner_text, and falls back to str().
+    This function attempts multiple methods to extract text content from a page
+    element, falling back through a hierarchy of common text extraction patterns
+    used by different web scraping libraries.
 
     Args:
-        element: A page element object from scrapling
+        element: A page element object from scrapling or similar library.
+            May have .text, .inner_text, or other text properties.
 
     Returns:
-        The text content of the element
+        The text content of the element as a string. Returns str(element)
+        as a last resort if no text properties are available.
+
+    Examples:
+        Basic usage with a page element:
+
+        >>> element = page.css("h1")[0]
+        >>> title = get_element_text(element)
+        >>> print(title)
+
+        The function handles various element types:
+
+        >>> # Elements with .text property
+        >>> element.text = "Hello World"
+        >>> get_element_text(element)
+        'Hello World'
+
+        >>> # Elements with .inner_text property
+        >>> element.inner_text = "Hello World"
+        >>> get_element_text(element)
+        'Hello World'
+
+    Note:
+        This function is useful when working with raw page elements from
+        scrapling's css() method, which may return elements with different
+        text properties depending on the library version.
     """
     # Try .text property first (most common in scrapling)
     if hasattr(element, "text"):
@@ -934,13 +962,48 @@ def get_element_text(element: Any) -> str:
 def get_element_html(element: Any) -> str:
     """Extract HTML content from a scraping element.
 
-    Checks for .html property first, then .innerHTML.
+    This function attempts multiple methods to extract HTML content from a page
+    element, falling back through a hierarchy of common HTML extraction patterns
+    used by different web scraping libraries.
 
     Args:
-        element: A page element object from scrapling
+        element: A page element object from scrapling or similar library.
+            May have .html, .html_content, .innerHTML, or .outerHTML properties.
 
     Returns:
-        The HTML content of the element
+        The HTML content of the element as a string. Returns an empty string
+        if no HTML properties are available.
+
+    Examples:
+        Basic usage with a page element:
+
+        >>> element = page.css("div.content")[0]
+        >>> html = get_element_html(element)
+        >>> print(html[:50])  # First 50 chars
+
+        The function handles various element types:
+
+        >>> # Elements with .html property
+        >>> element.html = "<div>Content</div>"
+        >>> get_element_html(element)
+        '<div>Content</div>'
+
+        >>> # Elements with .innerHTML property
+        >>> element.innerHTML = "<div>Content</div>"
+        >>> get_element_html(element)
+        '<div>Content</div>'
+
+        >>> # Elements with .outerHTML property (includes element tag)
+        >>> element.outerHTML = "<div id='main'>Content</div>"
+        >>> get_element_html(element)
+        "<div id='main'>Content</div>"
+
+    Note:
+        This function is useful when working with raw page elements from
+        scrapling's css() method, which may return elements with different
+        HTML properties depending on the library version. Prefer .html over
+        .innerHTML when both are available, as .html typically provides the
+        inner HTML content.
     """
     # Try .html property first
     if hasattr(element, "html"):
@@ -956,14 +1019,62 @@ def get_element_html(element: Any) -> str:
 def get_element_attribute(element: Any, attribute: str) -> str | None:
     """Extract an attribute value from a scraping element.
 
-    Checks for .get_attribute() method first, then direct property access.
+    This function attempts multiple methods to extract an attribute value from
+    a page element, falling back through a hierarchy of common attribute
+    extraction patterns used by different web scraping libraries.
 
     Args:
-        element: A page element object from scrapling
-        attribute: The name of the attribute to retrieve
+        element: A page element object from scrapling or similar library.
+            May support __getitem__, .attrib dict, .get_attribute() method,
+            or direct property access.
+        attribute: The name of the attribute to retrieve (e.g., "href", "src", "alt").
 
     Returns:
-        The attribute value, or None if not found
+        The attribute value as a string, or None if the attribute is not found
+        or the element doesn't support attribute access.
+
+    Examples:
+        Basic usage with a page element:
+
+        >>> element = page.css("a.link")[0]
+        >>> href = get_element_attribute(element, "href")
+        >>> print(href)
+        'https://example.com'
+
+        The function handles various element types:
+
+        >>> # Elements with .get_attribute() method (Playwright-style)
+        >>> element.get_attribute("href")
+        'https://example.com'
+
+        >>> # Elements with __getitem__ support (lxml-style)
+        >>> element["href"]
+        'https://example.com'
+
+        >>> # Elements with .attrib dict (lxml Element)
+        >>> element.attrib = {"href": "https://example.com"}
+        >>> get_element_attribute(element, "href")
+        'https://example.com'
+
+        >>> # Elements with direct property access
+        >>> element.href = "https://example.com"
+        >>> get_element_attribute(element, "href")
+        'https://example.com'
+
+    Note:
+        This function is useful when working with raw page elements from
+        scrapling's css() method, which may return elements with different
+        attribute access patterns depending on the underlying library
+        (Playwright, Selenium, lxml, etc.).
+
+    Common attributes:
+        - "href" - Link URL (for <a> tags)
+        - "src" - Image/script/source URL
+        - "alt" - Alternative text (for <img> tags)
+        - "class" - CSS classes
+        - "id" - Element ID
+        - "name" - Form field name
+        - "value" - Form field value
     """
     # Try .get_attribute() method first (standard in browser automation)
     if hasattr(element, "get_attribute"):

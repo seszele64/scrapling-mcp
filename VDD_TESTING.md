@@ -760,6 +760,228 @@ expected_keys = {
 - [ ] Multiple attributes returns dict
 - [ ] Non-matching returns None/[]
 
+### 5.6 JSON String Selectors Parsing
+
+**What to test**: The `selectors` parameter accepts both dict and JSON string formats
+
+| Test Case | Input | Expected |
+|-----------|-------|----------|
+| Dict input | `{"selectors": {"title": "h1"}}` | Parsed as dict |
+| JSON string | `{"selectors": "{\"title\": \"h1\"}"}` | Parsed as dict |
+| Invalid JSON string | `{"selectors": "{not valid"}` | Validation error |
+| Empty string | `{"selectors": ""}` | Validation error |
+
+**Test implementation**:
+```python
+def test_selectors_json_string_parsing():
+    """Test that selectors parameter accepts both dict and JSON string."""
+    from mcp_scraper.server import _validate_selector
+    
+    # Dict input should work
+    result = _validate_selector({"title": "h1"})
+    assert result is None  # No error
+    
+    # JSON string should be parsed
+    result = _validate_selector('{"title": "h1"}')
+    assert result is None  # No error
+    
+    # Invalid JSON should return error
+    result = _validate_selector("{invalid}")
+    assert result is not None  # Error expected
+```
+
+**Success criteria**:
+- [ ] Dict input is accepted and parsed correctly
+- [ ] JSON string input is parsed into dict
+- [ ] Invalid JSON returns validation error
+- [ ] Empty string returns validation error
+
+### 5.7 CSS Selector Extraction with page.css()
+
+**What to test**: Using scrapling's css() method for element selection
+
+| Test Case | Input | Expected |
+|-----------|-------|----------|
+| Single element | `page.css("h1")` | Returns element with .text |
+| Multiple elements | `page.css("li")` | Returns list of elements |
+| No match | `page.css(".nonexistent")` | Returns empty list |
+| Nested selector | `page.css("ul > li")` | Returns matching elements |
+
+**Test implementation**:
+```python
+class MockSelectorElement:
+    """Mock element returned by page.css()."""
+    def __init__(self, text="", html="", **attrs):
+        self.text = text
+        self.html = html
+        self._attrs = attrs
+    
+    def get_all_text(self, strip=True):
+        return self.text
+    
+    def __getitem__(self, key):
+        return self._attrs.get(key)
+    
+    def get_attribute(self, name):
+        return self._attrs.get(name)
+
+
+class MockPageWithCss:
+    """Mock page with css() method."""
+    def __init__(self):
+        self.body = "<html><body><h1>Title</h1></body></html>"
+    
+    def css(self, selector):
+        if selector == "h1":
+            return MockSelectorElement(text="Title", html="<h1>Title</h1>")
+        elif selector == "li":
+            return [
+                MockSelectorElement(text="Item 1"),
+                MockSelectorElement(text="Item 2"),
+            ]
+        return []  # No match
+
+
+def test_css_method_returns_elements():
+    """Test that page.css() returns usable elements."""
+    page = MockPageWithCss()
+    
+    # Single element
+    result = page.css("h1")
+    assert len(result) == 1
+    assert result[0].text == "Title"
+    
+    # Multiple elements
+    result = page.css("li")
+    assert len(result) == 2
+    assert result[0].text == "Item 1"
+    assert result[1].text == "Item 2"
+    
+    # No match
+    result = page.css(".nonexistent")
+    assert len(result) == 0
+```
+
+**Success criteria**:
+- [ ] page.css() returns elements with .text property
+- [ ] Multiple elements are returned as a list
+- [ ] Non-matching selectors return empty list
+- [ ] Elements support get_all_text() method
+
+### 5.8 Element Extraction Helper Functions
+
+**What to test**: Helper functions for extracting data from page elements
+
+| Test Case | Input | Expected |
+|-----------|-------|----------|
+| get_element_text with .text | `get_element_text(el)` where `el.text = "Hello"` | Returns "Hello" |
+| get_element_text with .inner_text | `get_element_text(el)` where `el.inner_text = "Hello"` | Returns "Hello" |
+| get_element_text fallback | `get_element_text(el)` with no text props | Returns str(el) |
+| get_element_html with .html | `get_element_html(el)` where `el.html = "<b>Hi</b>"` | Returns "<b>Hi</b>" |
+| get_element_html with .innerHTML | `get_element_html(el)` where `el.innerHTML = "<b>Hi</b>"` | Returns "<b>Hi</b>" |
+| get_element_html fallback | `get_element_html(el)` with no html props | Returns "" |
+| get_element_attribute with get_attribute | `get_element_attribute(el, "href")` | Returns attribute value |
+| get_element_attribute with property | `get_element_attribute(el, "href")` where `el.href = "..."` | Returns attribute value |
+| get_element_attribute not found | `get_element_attribute(el, "nonexistent")` | Returns None |
+
+**Test implementation**:
+```python
+from mcp_scraper.stealth import (
+    get_element_text,
+    get_element_html,
+    get_element_attribute,
+)
+
+
+class TestGetElementText:
+    """Tests for get_element_text() function."""
+    
+    def test_text_property(self):
+        """Test extraction via .text property."""
+        class MockElement:
+            text = "Hello World"
+        
+        assert get_element_text(MockElement()) == "Hello World"
+    
+    def test_inner_text_property(self):
+        """Test extraction via .inner_text property."""
+        class MockElement:
+            inner_text = "Hello World"
+        
+        assert get_element_text(MockElement()) == "Hello World"
+    
+    def test_fallback_to_str(self):
+        """Test fallback to str()."""
+        class MockElement:
+            pass  # No text properties
+        
+        result = get_element_text(MockElement())
+        assert isinstance(result, str)
+
+
+class TestGetElementHtml:
+    """Tests for get_element_html() function."""
+    
+    def test_html_property(self):
+        """Test extraction via .html property."""
+        class MockElement:
+            html = "<div>Content</div>"
+        
+        assert get_element_html(MockElement()) == "<div>Content</div>"
+    
+    def test_innerHTML_property(self):
+        """Test extraction via .innerHTML property."""
+        class MockElement:
+            innerHTML = "<div>Content</div>"
+        
+        assert get_element_html(MockElement()) == "<div>Content</div>"
+    
+    def test_fallback_empty_string(self):
+        """Test fallback to empty string."""
+        class MockElement:
+            pass  # No html properties
+        
+        result = get_element_html(MockElement())
+        assert result == ""
+
+
+class TestGetElementAttribute:
+    """Tests for get_element_attribute() function."""
+    
+    def test_get_attribute_method(self):
+        """Test extraction via .get_attribute() method."""
+        class MockElement:
+            def get_attribute(self, name):
+                return "https://example.com"
+        
+        assert get_element_attribute(MockElement(), "href") == "https://example.com"
+    
+    def test_direct_property(self):
+        """Test extraction via direct property access."""
+        class MockElement:
+            href = "https://example.com"
+        
+        assert get_element_attribute(MockElement(), "href") == "https://example.com"
+    
+    def test_attribute_not_found(self):
+        """Test returns None when attribute doesn't exist."""
+        class MockElement:
+            pass  # No href property
+        
+        assert get_element_attribute(MockElement(), "href") is None
+```
+
+**Success criteria**:
+- [ ] get_element_text() extracts text via .text property
+- [ ] get_element_text() falls back to .inner_text
+- [ ] get_element_text() falls back to str()
+- [ ] get_element_html() extracts HTML via .html property
+- [ ] get_element_html() falls back to .innerHTML
+- [ ] get_element_html() returns "" as fallback
+- [ ] get_element_attribute() extracts via .get_attribute()
+- [ ] get_element_attribute() falls back to direct property access
+- [ ] get_element_attribute() returns None when not found
+
 ---
 
 ## 6. Running Tests
