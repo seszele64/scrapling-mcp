@@ -535,16 +535,18 @@ def format_response(
 
     # Get page title - use CSS selector since Selector doesn't have .title property
     try:
-        if hasattr(page, "css_first"):
-            title_element = page.css_first("title")
-            if title_element:
-                # Get text content from title element
-                if hasattr(title_element, "get_all_text"):
-                    response["title"] = title_element.get_all_text(strip=True)
-                elif hasattr(title_element, "text"):
-                    response["title"] = title_element.text
+        if hasattr(page, "css"):
+            # Use scrapling's css() method to get title element
+            title_element = page.css("title")
+            if title_element and len(title_element) > 0:
+                # Get first title element
+                first_title = title_element[0]
+                if hasattr(first_title, "get_all_text"):
+                    response["title"] = first_title.get_all_text(strip=True)
+                elif hasattr(first_title, "text"):
+                    response["title"] = first_title.text
                 else:
-                    response["title"] = str(title_element) if title_element else None
+                    response["title"] = str(first_title) if first_title else None
             else:
                 response["title"] = None
         else:
@@ -613,94 +615,146 @@ def _extract_single_selector(page: Page, selector: str) -> Any:
     """Extract data from a single CSS selector.
 
     Supports:
-    - "selector" - extract text content (first match)
+    - "selector" - extract text content (first match or all matches)
     - "selector::html" - extract HTML content
-    - "selector@attr" - extract attribute value
+    - "selector::text" - extract text using scrapling's ::text pseudo-element
+    - "selector@attr" - extract attribute value (DEPRECATED: use selector::attr(attr) instead)
+    - "selector::attr(attr)" - extract attribute using scrapling's ::attr() pseudo-element
     - "selector@attr1@attr2" - extract multiple attributes as dict
 
     Args:
-        page: Scraped page object
-        selector: CSS selector with optional ::html or @attr suffix
+        page: Scraped page object (scrapling Selector)
+        selector: CSS selector with optional ::html, ::text, ::attr(), or @attr suffix
 
     Returns:
         Extracted value (str, list, or dict)
     """
+    # Check if page has css method (required for scrapling)
+    if not hasattr(page, "css"):
+        logger.warning(f"Page object missing 'css' method - cannot extract: {selector}")
+        return None
+
     # Parse selector for special syntax
     html_extraction = "::html" in selector
+    text_extraction = "::text" in selector
     attr_extraction = None
 
-    if "@" in selector and not html_extraction:
+    # Handle ::attr() pseudo-element (scrapling native)
+    if "::attr(" in selector:
+        match = re.search(r"::attr\(([^)]+)\)", selector)
+        if match:
+            attr_extraction = match.group(1)
+            selector = re.sub(r"::attr\([^)]+\)", "", selector)
+
+    # Handle deprecated @attr syntax
+    if (
+        "@" in selector
+        and not html_extraction
+        and not text_extraction
+        and "::attr(" not in selector
+    ):
         # Attribute extraction: "a@href" or "img@src@alt"
         parts = selector.rsplit("@", 1)
         selector = parts[0]
         attr_extraction = parts[1] if len(parts) > 1 else None
 
     # Remove ::html suffix if present
-    clean_selector = selector.replace("::html", "")
+    clean_selector = selector.replace("::html", "").strip()
 
-    # Get elements matching selector
+    if not clean_selector:
+        logger.warning(f"Empty selector after parsing: {selector}")
+        return None
+
+    logger.debug(
+        f"Extracting with selector: '{clean_selector}', html={html_extraction}, text={text_extraction}, attr={attr_extraction}"
+    )
+
+    # Get elements matching selector using scrapling's css() method
     try:
-        if hasattr(page, "get"):
-            # Use scrapling's get method which returns first match or list
-            elements = page.get(clean_selector)  # type: ignore[call-arg]
-        else:
-            elements = None
-    except Exception:
-        elements = None
+        elements = page.css(clean_selector)
+        logger.debug(
+            f"css() returned: type={type(elements)}, len={len(elements) if hasattr(elements, '__len__') else 'N/A'}"
+        )
+    except Exception as e:
+        logger.warning(f"Error executing css('{clean_selector}'): {e}")
+        return None
 
-    if elements is None:
+    # Check if we got any elements
+    if not elements or (hasattr(elements, "__len__") and len(elements) == 0):
+        logger.debug(f"No elements found for selector: {clean_selector}")
         return None
 
     # Handle single element vs multiple elements
-    is_iterable = hasattr(elements, "__iter__") and not isinstance(elements, str)
-    if is_iterable:
-        # Multiple elements
+    # Check if it's a Selectors collection (list-like) vs single Selector
+    is_collection = (
+        hasattr(elements, "__iter__")
+        and hasattr(elements, "__len__")
+        and not hasattr(elements, "get_all_text")
+    )
+
+    if is_collection:
+        # Multiple elements - return list
         element_list = list(elements)
+        logger.debug(f"Processing {len(element_list)} elements")
+
         if len(element_list) == 0:
             return None
 
+        # Handle text extraction using ::text pseudo-element
+        if text_extraction:
+            # The ::text pseudo-element already extracted text, just return as list
+            return [str(el) for el in element_list]
+
         if html_extraction:
-            return [get_element_html(el) for el in element_list]
+            return [_get_element_html(el) for el in element_list]
 
         if attr_extraction:
             if "@" in attr_extraction:
-                # Multiple attributes
+                # Multiple attributes: "selector@attr1@attr2"
                 attrs = attr_extraction.split("@")
                 result = []
                 for el in element_list:
                     attr_dict = {}
                     for attr in attrs:
-                        attr_dict[attr] = get_element_attribute(el, attr)
+                        attr_dict[attr] = _get_element_attribute(el, attr)
                     result.append(attr_dict)
                 return result
             else:
-                return [get_element_attribute(el, attr_extraction) for el in element_list]
+                return [_get_element_attribute(el, attr_extraction) for el in element_list]
 
-        # Default: return text content
-        return [get_element_text(el) for el in element_list]
+        # Default: return text content for each element
+        return [_get_element_text(el) for el in element_list]
     else:
-        # Single element
+        # Single element (first one extracted via extract_first() or similar)
         element = elements
+        logger.debug(f"Processing single element: {type(element)}")
+
+        # Handle text extraction using ::text pseudo-element
+        if text_extraction:
+            return str(element) if element is not None else None
 
         if html_extraction:
-            return get_element_html(element)
+            return _get_element_html(element)
 
         if attr_extraction:
             if "@" in attr_extraction:
                 # Multiple attributes
                 attrs = attr_extraction.split("@")
-                return {attr: get_element_attribute(element, attr) for attr in attrs}
+                return {attr: _get_element_attribute(element, attr) for attr in attrs}
             else:
-                return get_element_attribute(element, attr_extraction)
+                return _get_element_attribute(element, attr_extraction)
 
         # Default: return text content
-        return get_element_text(element)
+        return _get_element_text(element)
 
 
-def get_element_text(element: Any) -> str | None:
+def _get_element_text(element: Any) -> str | None:
     """Extract text content from an element."""
     try:
         if hasattr(element, "text"):
+            # Try get_all_text first for recursive text extraction
+            if hasattr(element, "get_all_text"):
+                return element.get_all_text(strip=True)
             return element.text  # type: ignore[no-any-return]
         elif hasattr(element, "inner_text"):
             return element.inner_text  # type: ignore[no-any-return]
@@ -715,10 +769,12 @@ def get_element_text(element: Any) -> str | None:
         return None
 
 
-def get_element_html(element: Any) -> str | None:
+def _get_element_html(element: Any) -> str | None:
     """Extract HTML content from an element."""
     try:
-        if hasattr(element, "html"):
+        if hasattr(element, "html_content"):
+            return element.html_content  # type: ignore[no-any-return]
+        elif hasattr(element, "html"):
             return element.html  # type: ignore[no-any-return]
         elif hasattr(element, "innerHTML"):
             return element.innerHTML  # type: ignore[no-any-return]
@@ -729,15 +785,30 @@ def get_element_html(element: Any) -> str | None:
         return None
 
 
-def get_element_attribute(element: Any, attr: str) -> str | None:
+def _get_element_attribute(element: Any, attr: str) -> str | None:
     """Extract attribute value from an element."""
     try:
+        # Try direct attribute access first (scrapling supports element['attr'])
+        if hasattr(element, "__getitem__"):
+            try:
+                val = element[attr]
+                return str(val) if val is not None else None
+            except (KeyError, TypeError):
+                pass
+
+        # Try attrib dict
+        if hasattr(element, "attrib") and isinstance(element.attrib, dict):
+            val = element.attrib.get(attr)
+            return str(val) if val is not None else None
+
+        # Try get_attribute method
+        if hasattr(element, "get_attribute"):
+            return element.get_attribute(attr)  # type: ignore[no-any-return]
+
+        # Try hasattr
         if hasattr(element, attr):
             return getattr(element, attr)  # type: ignore[no-any-return]
-        elif hasattr(element, "get_attribute"):
-            return element.get_attribute(attr)  # type: ignore[no-any-return]
-        elif hasattr(element, "attributes") and isinstance(element.attributes, dict):
-            return element.attributes.get(attr)
+
         return None
     except Exception:
         return None
