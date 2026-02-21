@@ -1,6 +1,7 @@
 """MCP Scraper Server - FastMCP server for stealth web scraping."""
 
 import asyncio
+import json
 import random
 import signal
 import sys
@@ -780,6 +781,22 @@ async def extract_structured(
         ValueError: If input parameters are invalid.
     """
     # T030: Input validation - check selectors type FIRST to prevent 'str' object has no attribute 'keys' error
+    # Handle case where selectors is passed as a JSON string instead of a dict (MCP client may stringify JSON)
+    if isinstance(selectors, str):
+        try:
+            selectors = json.loads(selectors)
+        except json.JSONDecodeError as e:
+            logger.warning(f"Failed to parse selectors as JSON: {e}")
+            return {
+                "url": url,
+                "status_code": None,
+                "title": None,
+                "text": None,
+                "extracted": None,
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "error": f"Selectors must be a valid JSON object: {str(e)}",
+            }
+
     if not isinstance(selectors, dict):
         logger.warning(f"Selectors must be a dictionary, got: {type(selectors).__name__}")
         return {
