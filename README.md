@@ -2,7 +2,7 @@
 
 [![Python Version](https://img.shields.io/badge/python-3.10+-blue)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Project Status](https://img.shields.io/badge/status-alpha-orange)](https://github.com/tr1x/mcp-scraper)
+[![Project Status](https://img.shields.io/badge/status-alpha-orange)](https://github.com/seszele64/scrapling-mcp)
 
 A Model Context Protocol (MCP) server that provides web scraping capabilities with an integrated stealth-aware scraping engine. Built on top of [FastMCP](https://github.com/jlowin/fastmcp) and leveraging the [Scrapling](https://github.com/D4Vinci/Scrapling) library.
 
@@ -35,7 +35,7 @@ The Scrapling MCP Server enables AI agents to:
 
 ```bash
 # Clone the repository
-git clone https://github.com/tr1x/mcp-scraper.git
+git clone https://github.com/seszele64/scrapling-mcp.git
 cd mcp-scraper
 
 # Install dependencies
