@@ -23,7 +23,7 @@ from loguru import logger
 # The scrapling library returns Selector objects with .text, .html, .status, etc.
 # Import core scrapling components
 from scrapling import Selector as Page
-from scrapling import StealthyFetcher as AsyncStealthySession
+from scrapling.fetchers import AsyncStealthySession
 
 
 class StealthLevel(Enum):
@@ -88,7 +88,8 @@ class StealthConfig:
         options: dict[str, Any] = {
             "headless": self.headless,
             "humanize": self.humanize,
-            "timeout": self.timeout,
+            # Convert seconds to milliseconds for scrapling
+            "timeout": self.timeout * 1000,
         }
 
         if self.solve_cloudflare:
@@ -246,13 +247,17 @@ async def get_session(config: StealthConfig | None = None) -> AsyncStealthySessi
 
     This function manages a global session instance. If a session exists
     with the same configuration, it returns the existing session.
-    Otherwise, it creates a new one.
+    Otherwise, it creates a new one and properly enters the async context.
+
+    Note: For one-off scraping, prefer using scrape_with_retry() which creates
+    a fresh session for each request. Use this only when you need to maintain
+    session state (cookies) across multiple requests.
 
     Args:
         config: Stealth configuration (default: standard stealth)
 
     Returns:
-        AsyncStealthySession instance
+        AsyncStealthySession instance (entered and ready to use)
 
     Raises:
         RuntimeError: If session creation fails
@@ -262,17 +267,29 @@ async def get_session(config: StealthConfig | None = None) -> AsyncStealthySessi
     if config is None:
         config = get_standard_stealth()
 
-    # Return existing session if config matches
+    # Return existing session if config matches and session is still valid
     if _session is not None and _config_cache == config:
-        return _session
+        # Verify session is still usable by checking if it has playwright
+        if hasattr(_session, "playwright") and _session.playwright is not None:
+            return _session
+        # Session is dead, need to recreate
+        logger.debug("Existing session is dead, recreating...")
 
-    # Close existing session if config changed
+    # Close existing session if config changed or session is dead
     if _session is not None:
         await close_session()
 
     try:
         options = config.to_scrapling_options()
         _session = AsyncStealthySession(**options)
+
+        # Try to use start() method first (preferred method)
+        if hasattr(_session, "start"):
+            await _session.start()  # type: ignore[attr-defined]
+        else:
+            # Fall back to __aenter__ for older versions
+            await _session.__aenter__()
+
         _config_cache = config
         logger.debug(f"Created new stealth session with config: {config}")
         return _session
@@ -291,7 +308,8 @@ async def close_session() -> None:
 
     if _session is not None:
         try:
-            await _session.close()  # type: ignore[attr-defined]
+            # Properly exit the async context manager to cleanup browser
+            await _session.__aexit__(None, None, None)
             logger.debug("Stealth session closed successfully")
         except Exception as e:
             logger.warning(f"Error closing session: {e}")
@@ -375,28 +393,29 @@ async def scrape_with_retry(
                 config.proxy = proxy_list[current_proxy_idx]
                 logger.debug(f"Using proxy: {config.proxy}")
 
-            # Get or create session
-            session = await get_session(config)
+            # Create a new session for each attempt using async with
+            # This ensures proper browser initialization and cleanup
+            options = config.to_scrapling_options()
+            async with AsyncStealthySession(**options) as session:
+                # Attempt to fetch the page
+                logger.info(f"Scraping attempt {attempt + 1}/{max_retries}: {url}")
+                page = await session.fetch(url, wait_for=2)  # type: ignore[call-arg,misc]
 
-            # Attempt to fetch the page
-            logger.info(f"Scraping attempt {attempt + 1}/{max_retries}: {url}")
-            page = await session.fetch(url, wait_for=2)  # type: ignore[call-arg,misc]
+                # Check for Cloudflare challenge
+                if _detect_cloudflare(page):
+                    if config.solve_cloudflare:
+                        logger.info("Cloudflare challenge detected, attempting to solve...")
+                        await asyncio.sleep(3)  # Wait for challenge
+                        page = await session.fetch(url, wait_for=5)  # type: ignore[call-arg,misc]
+                    else:
+                        raise CloudflareError("Cloudflare protection detected")
 
-            # Check for Cloudflare challenge
-            if _detect_cloudflare(page):
-                if config.solve_cloudflare:
-                    logger.info("Cloudflare challenge detected, attempting to solve...")
-                    await asyncio.sleep(3)  # Wait for challenge
-                    page = await session.fetch(url, wait_for=5)  # type: ignore[call-arg,misc]
-                else:
-                    raise CloudflareError("Cloudflare protection detected")
+                # Check if blocked
+                if _detect_block(page):
+                    raise BlockedError("Request blocked by anti-bot measures")
 
-            # Check if blocked
-            if _detect_block(page):
-                raise BlockedError("Request blocked by anti-bot measures")
-
-            logger.info(f"Successfully scraped: {url}")
-            return page  # type: ignore[no-any-return]
+                logger.info(f"Successfully scraped: {url}")
+                return page  # type: ignore[no-any-return]
 
         except CloudflareError:
             logger.warning(f"Cloudflare error on attempt {attempt + 1}")
@@ -489,7 +508,7 @@ def format_response(
     """Format scraping response into a structured dictionary.
 
     Args:
-        page: Scraped page object
+        page: Scraped page object (scrapling Response/Selector object)
         url: Original URL that was scraped
         selectors: Optional dict of {name: css_selector} to extract
 
@@ -508,30 +527,52 @@ def format_response(
         "timestamp": datetime.utcnow().isoformat() + "Z",
     }
 
-    # Get page title
-    try:
-        response["title"] = getattr(page, "title", None)
-    except Exception:
-        pass
-
-    # Get status code
+    # Get status code - scrapling Response has .status attribute
     try:
         response["status"] = getattr(page, "status", None)
     except Exception:
         pass
 
-    # Get HTML content
+    # Get page title - use CSS selector since Selector doesn't have .title property
     try:
-        response["html"] = getattr(page, "html", None)
+        if hasattr(page, "css_first"):
+            title_element = page.css_first("title")
+            if title_element:
+                # Get text content from title element
+                if hasattr(title_element, "get_all_text"):
+                    response["title"] = title_element.get_all_text(strip=True)
+                elif hasattr(title_element, "text"):
+                    response["title"] = title_element.text
+                else:
+                    response["title"] = str(title_element) if title_element else None
+            else:
+                response["title"] = None
+        else:
+            response["title"] = getattr(page, "title", None)
+    except Exception as e:
+        logger.debug(f"Error extracting title: {e}")
+        response["title"] = None
+
+    # Get HTML content - scrapling Response uses .body for raw HTML
+    try:
+        response["html"] = getattr(page, "body", None)
+        # Fallback to html_content if body is not available
+        if response["html"] is None:
+            response["html"] = getattr(page, "html_content", None)
     except Exception:
         pass
 
-    # Get text content
+    # Get text content - use get_all_text() method for full page text
     try:
-        if hasattr(page, "text"):
+        if hasattr(page, "get_all_text"):
+            response["text"] = page.get_all_text(strip=True)
+        elif hasattr(page, "text"):
             response["text"] = page.text
-    except Exception:
-        pass
+        else:
+            response["text"] = ""
+    except Exception as e:
+        logger.debug(f"Error extracting text: {e}")
+        response["text"] = ""
 
     # Extract specific selectors if provided
     if selectors:

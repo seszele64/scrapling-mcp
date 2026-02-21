@@ -313,7 +313,7 @@ async def scrape_simple(
     try:
         # Use minimal stealth config for fast scraping
         config = get_minimal_stealth()
-        config.timeout = timeout // 1000  # Convert ms to seconds
+        config.timeout = timeout // 1000  # Convert ms to seconds for StealthConfig
 
         # Prepare selectors if provided
         selectors_dict: dict[str, str] | None = None
@@ -488,7 +488,7 @@ async def scrape_stealth(
     # T016 & T018: Configure network settings and proxy
     config.network_idle = network_idle
     config.load_dom = load_dom
-    config.timeout = timeout // 1000  # Convert ms to seconds
+    config.timeout = timeout // 1000  # Convert ms to seconds for StealthConfig
     if proxy:
         config.proxy = proxy
 
@@ -779,12 +779,25 @@ async def extract_structured(
     Raises:
         ValueError: If input parameters are invalid.
     """
-    # T031: Log tool entry with parameters
+    # T030: Input validation - check selectors type FIRST to prevent 'str' object has no attribute 'keys' error
+    if not isinstance(selectors, dict):
+        logger.warning(f"Selectors must be a dictionary, got: {type(selectors).__name__}")
+        return {
+            "url": url,
+            "status_code": None,
+            "title": None,
+            "text": None,
+            "extracted": None,
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "error": "Selectors must be a dictionary",
+        }
+
+    # T031: Log tool entry with parameters (after validation to avoid errors)
     logger.debug(
         f"extract_structured called with: url={url}, selectors={list(selectors.keys())}, stealth_level={stealth_level}"
     )
 
-    # T030: Input validation
+    # T030: Input validation - URL validation
     if error_msg := _validate_url_param(url):
         logger.warning(f"URL validation failed: {error_msg}")
         return {
@@ -795,18 +808,6 @@ async def extract_structured(
             "extracted": None,
             "timestamp": datetime.utcnow().isoformat() + "Z",
             "error": error_msg,
-        }
-
-    if not isinstance(selectors, dict):
-        logger.warning("Selectors must be a dictionary")
-        return {
-            "url": url,
-            "status_code": None,
-            "title": None,
-            "text": None,
-            "extracted": None,
-            "timestamp": datetime.utcnow().isoformat() + "Z",
-            "error": "Selectors must be a dictionary",
         }
 
     if error_msg := _validate_stealth_level(stealth_level):
