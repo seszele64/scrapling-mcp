@@ -44,6 +44,9 @@ dev = [
     "pre-commit>=3.0",
 ]
 
+[project.scripts]
+mcp-scraper = "mcp_scraper.server:main"
+
 [tool.setuptools.packages.find]
 where = ["src"]
 

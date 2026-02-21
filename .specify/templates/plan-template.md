@@ -31,7 +31,17 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+| Principle | Check | Status |
+|-----------|-------|--------|
+| I. MCP Protocol Compliance | Does this feature expose tools via FastMCP with proper types? | [ ] |
+| II. Stealth-First Design | Are stealth configurations properly defined? | [ ] |
+| III. Security by Default | Is URL validation and SSRF protection in place? | [ ] |
+| IV. Reliability Through Retry | Is retry logic with exponential backoff implemented? | [ ] |
+| V. Configuration Flexibility | Are all options configurable via environment/parameters? | [ ] |
+
+**Technology Standards**: Python 3.10+, type hints, async/await, Loguru, Pydantic
+
+**Quality Gates**: Black (100 chars), Ruff, MyPy, docstrings, custom exceptions
 
 ## Project Structure
 
